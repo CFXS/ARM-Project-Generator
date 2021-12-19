@@ -259,6 +259,11 @@ print("Copy .clang-format");
 WriteFile(cfg, ".clang-format", ReadFile("Templates/.clang-format"))
 
 -------------------------------------------------------------------------------------
+-- Generate .gitignore
+print("Generate .gitignore");
+WriteFile(cfg, ".gitignore", "/build")
+
+-------------------------------------------------------------------------------------
 -- Generate _License.lhg
 if cfg.LicenseHeader then
     print("Generate _License.lhg");
