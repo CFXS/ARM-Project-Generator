@@ -77,6 +77,11 @@ local MODULES = {
         defaultBranch = "master",
         path = "CMake"
     },
+    ["LicenseGen"]      = { -- LicenseGen
+        git = "https://github.com/CFXS/CFXS-License-Header-Generator.git",
+        defaultBranch = "master",
+        path = "${ProjectName}/vendor/LicenseGen"
+    },
     ["SeggerRTT"]      = { -- SeggerRTT
         git = "https://github.com/CFXS/SeggerRTT-printf.git",
         defaultBranch = "master",
@@ -108,10 +113,12 @@ local MODULES = {
                 'add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/vendor/CFXS-HW")',
                 'target_include_directories(CFXS_HW PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/vendor/CFXS-Base/include")'
             }
-            if TableContains(cfg.Modules, "tm4c-driverlib", true) then
+            if TableContains(cfg.Modules, "tm4c-driverlib") then
                 table.insert(ret, 'target_include_directories(CFXS_HW PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/vendor/tm4c-driverlib")')
             end
             table.insert(ret, 'target_link_libraries(${EXE_NAME} PUBLIC CFXS_HW)')
+
+            return table.concat(ret, "\n")
         end
     },
     ["CFXS-DSP"]       = { -- CFXS-DSP
@@ -131,10 +138,10 @@ local MODULES = {
         git = "https://github.com/CFXS/tm4c-driverlib.git",
         defaultBranch = "master",
         path = "${ProjectName}/vendor/tm4c-driverlib",
-        module_entry = function(cfg)
+        get_module_entry = function(cfg)
             return table.concat({
                 'add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/vendor/tm4c-driverlib")',
-                'target_link_libraries(${EXE_NAME} PUBLIC TM4C_driverlib)'
+                'target_link_libraries(${EXE_NAME} PUBLIC tm4c_driverlib)'
             }, '\n')
         end
     },
@@ -155,6 +162,14 @@ local CPUS = {
     }
 }
 
+function InsertVariables(cfg, str)
+    return str:gsub("${ProjectName}", cfg.ProjectName)
+                :gsub("${ProjectNameRaw}", cfg.ProjectNameRaw)
+                :gsub("${Toolchain}", TOOLCHAINS[cfg.Toolchain])
+                :gsub("${ToolchainTarget}", CPUS[cfg.CPU].toolchain_target)
+                :gsub("${Year}", os.date("%Y"))
+end
+
 local cfg = loadfile(args[1].."/APG.cfg.lua")();
 
 if cfg.Modules == nil then
@@ -169,20 +184,34 @@ end
 
 CFXS_ASSERT(cfg.ProjectName ~= nil, "\"ProjectName\" field not found")
 CFXS_ASSERT(type(cfg.ProjectName) == "string", "\"ProjectName\" is not a string")
+cfg.ProjectNameRaw = cfg.ProjectName
+cfg.ProjectName = cfg.ProjectName:gsub("%s", "_"):gsub("/", "_"):gsub("\\", "_"):gsub("%$", "_"):gsub("%%", "_"):gsub("&", "_"):gsub("%^", "_"):gsub("\"", "_"):gsub("'", "_"):gsub("!", "_")
 
 CFXS_ASSERT(cfg.Toolchain ~= nil, "\"Toolchain\" field not found")
 CFXS_ASSERT(type(cfg.Toolchain) == "string", "\"Toolchain\" is not a string")
 CFXS_ASSERT(TableContains(TOOLCHAINS, cfg.Toolchain, true), "Unknown toolchain: \""..cfg.Toolchain.."\"")
 print("Toolchain: "..cfg.Toolchain)
 
-if cfg.UnityBuild ~= nil then
-    CFXS_ASSERT(tonumber(cfg.UnityBuild), "UnityBuild is not a number")
+if cfg.UnityBuildBatchSize ~= nil then
+    CFXS_ASSERT(tonumber(cfg.UnityBuildBatchSize), "UnityBuildBatchSize is not a number")
+end
+
+if cfg.LicenseHeader ~= nil then
+    CFXS_ASSERT(type(cfg.LicenseHeader) == "string", "LicenseHeader is not a string")
 end
 
 if cfg.IncludeDirectories ~= nil then
     CFXS_ASSERT(type(cfg.IncludeDirectories) == "table", "IncludeDirectories is not a table")
     if #cfg.IncludeDirectories == 0 then
         cfg.IncludeDirectories = nil
+    end
+end
+
+
+if cfg.Defines ~= nil then
+    CFXS_ASSERT(type(cfg.Defines) == "table", "Defines is not a table")
+    if #cfg.Defines == 0 then
+        cfg.Defines = nil
     end
 end
 
@@ -216,7 +245,7 @@ end
 
 -------------------------------------------------------------------------------------
 -- Generate folder structure
-print("Generating folder structure")
+print("Generate folder structure")
 MakeDir("Docs")
 MakeDir(".vscode")
 MakeDir(cfg.ProjectName)
@@ -225,18 +254,194 @@ MakeDir(cfg.ProjectName.."/src")
 MakeDir(cfg.ProjectName.."/vendor")
 
 -------------------------------------------------------------------------------------
--- Add .clang-format
+-- Copy .clang-format
 print("Copy .clang-format");
 WriteFile(cfg, ".clang-format", ReadFile("Templates/.clang-format"))
 
 -------------------------------------------------------------------------------------
+-- Generate _License.lhg
+if cfg.LicenseHeader then
+    print("Generate _License.lhg");
+    WriteFile(cfg, cfg.ProjectName.."/_License.lhg", InsertVariables(cfg, cfg.LicenseHeader))
+end
+
+-------------------------------------------------------------------------------------
+-- Copy LinkerScript.ld
+print("Copy LinkerScript.ld");
+WriteFile(cfg, cfg.ProjectName.."/LinkerScript.ld", ReadFile("Templates/LinkerScripts/"..cfg.CPU.."/LinkerScript.ld"))
+
+-------------------------------------------------------------------------------------
 -- Generate root CMakeLists.txt
-print("Generating root CMakeLists.txt file")
-
-local root_CMakeLists = ReadFile("Templates/root_CMakeLists.txt")
-                           :gsub("${ProjectName}", cfg.ProjectName)
-                           :gsub("${Toolchain}", TOOLCHAINS[cfg.Toolchain])
-
+print("Generate root CMakeLists.txt file")
+local root_CMakeLists = InsertVariables(cfg, ReadFile("Templates/root_CMakeLists.txt"))
 WriteFile(cfg, "CMakeLists.txt", root_CMakeLists)
+
+-------------------------------------------------------------------------------------
+-- Copy _Sources.cmake
+print("Copy _Sources.cmake");
+WriteFile(cfg, cfg.ProjectName.."/_Sources.cmake", ReadFile("Templates/_Sources.cmake"))
+
+-------------------------------------------------------------------------------------
+-- Generate _Modules.cmake
+print("Generate _Modules.cmake");
+
+local moduleInit = {}
+
+for i, v in pairs(cfg.Modules) do
+    local mod = MODULES[v]
+    
+    if mod.get_module_entry then
+        table.insert(moduleInit, "# "..v.."\n"..mod.get_module_entry(cfg))
+    end
+end
+
+WriteFile(cfg, cfg.ProjectName.."/_Modules.cmake", table.concat(moduleInit, "\n\n"))
+
+-------------------------------------------------------------------------------------
+-- Generate _IncludeDirectories.cmake
+print("Generate _IncludeDirectories.cmake");
+local includeDirs = {}
+
+for i, v in pairs(cfg.IncludeDirectories) do
+    table.insert(includeDirs, 'target_include_directories(${EXE_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}'..v..')')
+end
+
+WriteFile(cfg, cfg.ProjectName.."/_IncludeDirectories.cmake", table.concat(includeDirs, "\n"))
+
+-------------------------------------------------------------------------------------
+-- Generate _Defines.cmake
+print("Generate _Defines.cmake");
+
+local defines = {}
+
+table.insert(defines, "# Target")
+for i, v in pairs(CPUS[cfg.CPU].defs) do
+    table.insert(defines, 'add_compile_definitions("'..v..'")')
+end
+table.insert(defines, 'add_compile_definitions("CFXS_CPU_CLOCK_FREQUENCY='..cfg.CLOCK_FREQUENCY..'")')
+
+if cfg.Defines then
+    table.insert(defines, "\n# Project")
+    
+    local debugDefined = {}
+    local releaseDefined = {}
+    local minsizerelDefined = {}
+    local relwithdebinfoDefined = {}
+    local not_debugDefined = {}
+    local not_releaseDefined = {}
+    local not_minsizerelDefined = {}
+    local not_relwithdebinfoDefined = {}
+    
+    for i, v in pairs(cfg.Defines) do
+        if v:match(":") then
+            local group = v:match("(.+):")
+            local def = v:match(":(.+)")
+            local cleanGroup = group:gsub("!", "")
+
+            CFXS_ASSERT(cleanGroup == "debug" or cleanGroup == "release" or cleanGroup == "relwithdebinfo" or cleanGroup == "minsizerel", "Unknown define group: \""..cleanGroup.."\"")
+
+            if cleanGroup == "debug" then
+                table.insert(group:match("!") and not_debugDefined or debugDefined, 'add_compile_definitions("'..def..'")')
+            elseif cleanGroup == "release" then
+                table.insert(group:match("!") and not_releaseDefined or releaseDefined, 'add_compile_definitions("'..def..'")')
+            elseif cleanGroup == "minsizerel" then
+                table.insert(group:match("!") and not_minsizerelDefined or minsizerelDefined, 'add_compile_definitions("'..def..'")')
+            elseif cleanGroup == "relwithdebinfo" then
+                table.insert(group:match("!") and not_relwithdebinfoDefined or relwithdebinfoDefined, 'add_compile_definitions("'..def..'")')
+            end
+        else
+            table.insert(defines, 'add_compile_definitions("'..v..'")')
+        end
+    end
+
+    if #debugDefined > 0 then
+        table.insert(defines, '\nif("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")')
+        for i, v in pairs(debugDefined) do
+            table.insert(defines, "    "..v)
+        end
+        if #not_debugDefined > 0 then
+            table.insert(defines, 'else()')
+            for i, v in pairs(not_debugDefined) do
+                table.insert(defines, "    "..v)
+            end
+        end
+        table.insert(defines, 'endif()')
+    end
+
+    if #releaseDefined > 0 then
+        table.insert(defines, '\nif("${CMAKE_BUILD_TYPE}" STREQUAL "Release")')
+        for i, v in pairs(releaseDefined) do
+            table.insert(defines, "    "..v)
+        end
+        if #not_releaseDefined > 0 then
+            table.insert(defines, 'else()')
+            for i, v in pairs(not_releaseDefined) do
+                table.insert(defines, "    "..v)
+            end
+        end
+        table.insert(defines, 'endif()')
+    end
+
+    if #minsizerelDefined > 0 then
+        table.insert(defines, '\nif("${CMAKE_BUILD_TYPE}" STREQUAL "MinSizeRel")')
+        for i, v in pairs(minsizerelDefined) do
+            table.insert(defines, "    "..v)
+        end
+        if #not_minsizerelDefined > 0 then
+            table.insert(defines, 'else()')
+            for i, v in pairs(not_minsizerelDefined) do
+                table.insert(defines, "    "..v)
+            end
+        end
+        table.insert(defines, 'endif()')
+    end
+
+    if #relwithdebinfoDefined > 0 then
+        table.insert(defines, '\nif("${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo")')
+        for i, v in pairs(relwithdebinfoDefined) do
+            table.insert(defines, "    "..v)
+        end
+        if #not_relwithdebinfoDefined > 0 then
+            table.insert(defines, 'else()')
+            for i, v in pairs(not_relwithdebinfoDefined) do
+                table.insert(defines, "    "..v)
+            end
+        end
+        table.insert(defines, 'endif()')
+    end
+end
+
+WriteFile(cfg, cfg.ProjectName.."/_Defines.cmake", table.concat(defines, "\n"))
+
+-------------------------------------------------------------------------------------
+-- Generate project CMakeLists.txt
+print("Generate project CMakeLists.txt file")
+local project_CMakeLists = InsertVariables(cfg, ReadFile("Templates/project_CMakeLists.txt"))
+
+if cfg.UnityBuildBatchSize then
+    project_CMakeLists = project_CMakeLists:gsub("${UNITY_BUILD_CONFIG}", "\nset(CMAKE_UNITY_BUILD true)\nset(CMAKE_UNITY_BUILD_BATCH_SIZE "..cfg.UnityBuildBatchSize..")\n")
+else
+    project_CMakeLists = project_CMakeLists:gsub("${UNITY_BUILD_CONFIG}", "")
+end
+
+WriteFile(cfg, cfg.ProjectName.."/CMakeLists.txt", project_CMakeLists)
+
+-------------------------------------------------------------------------------------
+-- Add submodules
+print("Add submodules")
+
+for i, v in pairs(cfg.Modules) do
+    local moduleName = v:match(":") and v:match(":(.+)") or v
+    local branchName = v:match(":") and v:match("(.+):") or MODULES[moduleName].defaultBranch
+    local link = MODULES[v].git
+    local path = MODULES[v].path
+
+    Exec(table.concat({
+        'cd '..ProjectDir,
+        'git submodule add -b '..branchName..' -- '..link..' '..InsertVariables(cfg, path)
+    }, " && "));
+end
+
+-- git submodule add -b master --name master -- https://github.com/nlohmann/json.git libs/json
 
 print("Done")
