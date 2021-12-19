@@ -447,6 +447,4 @@ for i, v in pairs(cfg.Modules) do
     }, " && "));
 end
 
--- git submodule add -b master --name master -- https://github.com/nlohmann/json.git libs/json
-
 print("Done")
