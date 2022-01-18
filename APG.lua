@@ -134,6 +134,19 @@ local MODULES = {
             }, '\n')
         end
     },
+    ["CFXS-CNC"]       = { -- CFXS-CNC
+        git = "https://github.com/CFXS/CFXS-DSP.git",
+        defaultBranch = "master",
+        path = "${ProjectName}/vendor/CFXS-CNC",
+        get_module_entry = function(cfg)
+            CFXS_ASSERT(TableContains(cfg.Modules, "CFXS-Base", true), "CFXS-CNC missing CFXS-Base dependency")
+            return table.concat({
+                'add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/vendor/CFXS-CNC")',
+                'target_include_directories(CFXS_CNC PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/vendor/CFXS-Base/include")',
+                'target_link_libraries(${EXE_NAME} PUBLIC CFXS_CNC)'
+            }, '\n')
+        end
+    },
     ["tm4c-driverlib"] = { -- tm4c-driverlib
         git = "https://github.com/CFXS/tm4c-driverlib.git",
         defaultBranch = "master",
