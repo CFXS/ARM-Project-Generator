@@ -135,7 +135,7 @@ local MODULES = {
         end
     },
     ["CFXS-CNC"]       = { -- CFXS-CNC
-        git = "https://github.com/CFXS/CFXS-DSP.git",
+        git = "https://github.com/CFXS/CFXS-CNC.git",
         defaultBranch = "master",
         path = "${ProjectName}/vendor/CFXS-CNC",
         get_module_entry = function(cfg)
