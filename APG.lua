@@ -28,7 +28,7 @@ end
 
 function TableContains(t, val, byKey)
     for k, v in pairs(t) do
-        if (byKey == true and k or v) == val then
+        if ((byKey == true) and k or v) == val then
             return true
         end
     end
@@ -126,7 +126,7 @@ local MODULES = {
         defaultBranch = "master",
         path = "${ProjectName}/vendor/CFXS-DSP",
         get_module_entry = function(cfg)
-            CFXS_ASSERT(TableContains(cfg.Modules, "CFXS-Base", true), "CFXS-DSP missing CFXS-Base dependency")
+            CFXS_ASSERT(TableContains(cfg.Modules, "CFXS-Base", false), "CFXS-DSP missing CFXS-Base dependency")
             return table.concat({
                 'add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/vendor/CFXS-DSP")',
                 'target_include_directories(CFXS_DSP PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/vendor/CFXS-Base/include")',
@@ -139,7 +139,7 @@ local MODULES = {
         defaultBranch = "master",
         path = "${ProjectName}/vendor/CFXS-CNC",
         get_module_entry = function(cfg)
-            CFXS_ASSERT(TableContains(cfg.Modules, "CFXS-Base", true), "CFXS-CNC missing CFXS-Base dependency")
+            CFXS_ASSERT(TableContains(cfg.Modules, "CFXS-Base", false), "CFXS-CNC missing CFXS-Base dependency")
             return table.concat({
                 'add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/vendor/CFXS-CNC")',
                 'target_include_directories(CFXS_CNC PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/vendor/CFXS-Base/include")',
