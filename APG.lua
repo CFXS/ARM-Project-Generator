@@ -109,6 +109,7 @@ local MODULES = {
         defaultBranch = "master",
         path = "${ProjectName}/vendor/CFXS-HW",
         get_module_entry = function(cfg)
+            CFXS_ASSERT(TableContains(cfg.Modules, "CFXS-Base", false), "CFXS-HW missing CFXS-Base dependency")
             local ret = {
                 'add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/vendor/CFXS-HW")',
                 'target_include_directories(CFXS_HW PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/vendor/CFXS-Base/include")'
