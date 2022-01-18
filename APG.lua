@@ -170,7 +170,8 @@ local CPUS = {
         defs = {
             "PART_TM4C1294NCPDT",
             "TARGET_IS_TM4C129_RA2",
-            "CFXS_PLATFORM_TM4C"
+            "CFXS_PLATFORM_TM4C",
+            "CFXS_DEVICE_CLASS_TM4C129X"
         },
         toolchain_target = "CortexM4F"
     }
