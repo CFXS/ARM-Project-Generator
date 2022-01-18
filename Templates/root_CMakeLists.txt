@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
+set(CFXS_EMBEDDED "Not a desktop project" ON)
+
 include("${Toolchain}")
 project(${ProjectName} ASM C CXX)
 add_subdirectory(${ProjectName})
